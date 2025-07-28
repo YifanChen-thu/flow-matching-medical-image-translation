@@ -18,7 +18,6 @@
 |---------|---------|---------|---------|---------|
 |Introducing 3D Representation for Medical Image Volume-to-Volume Translation via Score Fusion.[[paper](https://arxiv.org/pdf/2501.07430)]|20250206||||
 |.[[paper]()][[code]()]|||||
-
 |.[[paper]()][[code]()]|||||
 |.[[paper]()][[code]()]|||||
 |Deterministic Medical Image Translation via High-fidelity Brownian Bridges (HiFi‑BBrg).[[paper](https://arxiv.org/pdf/2503.22531)]|arxiv20250308||||
