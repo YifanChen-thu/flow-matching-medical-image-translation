@@ -22,6 +22,22 @@
 |.[[paper]()][[code]()]|||||
 |Deterministic Medical Image Translation via High-fidelity Brownian Bridges (HiFi‑BBrg).[[paper](https://arxiv.org/pdf/2503.22531)]|arxiv20250308||||
 
+### Flow ODE
+| paper | 会议/期刊 | dataset | 分类 | 器官 |
+|---------|---------|---------|---------|---------|
+|Bi-modality medical images synthesis by a bi-directional discrete process matching method.[[paper](https://arxiv.org/pdf/2409.03977)]|20250703 ilcr2025投稿没中||||
+|.[[paper]()][[code]()]|||||
+|.[[paper]()][[code]()]|||||
+
+
+### transformer
+| paper | 会议/期刊 | dataset | 分类 | 器官 |
+|---------|---------|---------|---------|---------|
+|One Model to Synthesize Them All: Multi-contrast Multi-scale Transformer for Missing Data Imputation.[[paper](https://www.semanticscholar.org/reader/04b67ac881b8285a55be147785c5e67eb544cc99)]|TMI2023||||
+|.[[paper]()][[code]()]|||||
+|.[[paper]()][[code]()]|||||
+|.[[paper]()][[code]()]|||||
+
 ### mamba
 | paper | 会议/期刊 | dataset | 分类 | 器官 |
 |---------|---------|---------|---------|---------|
@@ -31,9 +47,6 @@
 |.[[paper]()][[code]()]|||||
 |.[[paper]()][[code]()]|||||
 
-### Flow ODE
-| paper | 会议/期刊 | dataset | 分类 | 器官 |
-|---------|---------|---------|---------|---------|
-|Bi-modality medical images synthesis by a bi-directional discrete process matching method.[[paper](https://arxiv.org/pdf/2409.03977)]|20250703 ilcr2025投稿没中||||
-|.[[paper]()][[code]()]|||||
-|.[[paper]()][[code]()]|||||
+
+
+
