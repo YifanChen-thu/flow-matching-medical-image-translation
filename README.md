@@ -2,6 +2,7 @@
 
 # Contents
 - [Dataset & Structure](#dataset--structure)
+  - [Details](#Details)
   - [MR](MR)
     - [Brain](#brats17)
     - [Breast](#breast)
@@ -24,6 +25,9 @@
  
 
 # Dataset & Structure
+## Details
+![Alt text](https://github.com/YifanChen-thu/flow-matching-medical-image-translation/blob/main/数据集详情.png)
+
 ## MR
 ### Brain
 ```markdown
