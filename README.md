@@ -14,9 +14,10 @@
 - [backbone](#backbone)
 - [baseline](#baseline)
     - [flow-matching](#flow-matching)
-    - []()
-    - []()
-   
+    - [diffusion](#diffusion)
+    - [flow ode](#Flow-ODE)
+    - [transformer](#transformer)
+    - [mamba](#mamba)
 
 # Dataset & Structure
 ## MR
