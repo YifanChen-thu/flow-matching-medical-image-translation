@@ -11,13 +11,17 @@
     - [Bladder Kidney](#bladder-kidney)
     - [Lung](#lung)
     - [Stomach Colon Liver Pancreas](#stomach-colon-liver-pancreas)
-- [backbone](#backbone)
+- [our framework](#our-framework)
+  - [dataset process pipeline](#dataset-process-pipeline) 
+  - [architecture](#architecture)
+  - [environment](#environment)
 - [baseline](#baseline)
     - [flow-matching](#flow-matching)
     - [diffusion](#diffusion)
     - [flow ode](#Flow-ODE)
     - [transformer](#transformer)
     - [mamba](#mamba)
+ 
 
 # Dataset & Structure
 ## MR
@@ -345,7 +349,16 @@ Stomach_Colon_Liver_Pancreas_CT_train_val_test
 │   │   ├── ...
 ```
 
-# backbone
+# our framework
+
+## dataset process pipeline
+
+## architecture
+
+## environment
+
+
+
 
 # baseline
 
@@ -392,6 +405,7 @@ Stomach_Colon_Liver_Pancreas_CT_train_val_test
 |.[[paper]()][[code]()]|||||
 |.[[paper]()][[code]()]|||||
 |.[[paper]()][[code]()]|||||
+
 
 
 
