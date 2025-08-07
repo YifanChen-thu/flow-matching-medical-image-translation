@@ -80,6 +80,10 @@ Brain_MR_train_val_test
 
 ```markdown
 包含三个公开乳腺癌数据集，已经按照比例做了合并（.mat格式版本）--> 后面会数据处理成nii版本
+1.	bpe = background parenchymal enhancement
+2.	dce1, dce2, dce3 = the normalized data for initial phase, mid-phase, and late-phase.
+3.	ser = signal enhancement ratio
+4.	tumor, tumor1 = are the segmentation masks. They are pretty much similar (tumor1 had a slight erosion applied so a bit smaller)
 Breast_MR_train_val_test
 ├── train
 │   │   ├── ISPY1_1001.mat
@@ -106,7 +110,14 @@ Breast_MR_train_val_test
 nii版本，待处理
 breast_train_val_test
 ├── train
-│   │   ├── 
+│   │   ├── ISPY1_1001
+│   │   │   ├── ISPY1_1001_dce1.nii
+│   │   │   ├── ISPY1_1001_dce2.nii
+│   │   │   ├── ISPY1_1001_dce3.nii
+│   │   │   ├── ISPY1_1001_tumor.nii
+│   │   │   ├── ISPY1_1001_tumor1.nii
+│   │   │   ├── ISPY1_1001_ser.nii
+│   │   │   ├── ISPY1_1001_bpe_img_resolution.json
 │   │   ├── ...
 │   │   ├── 
 │   │   ├── ...
