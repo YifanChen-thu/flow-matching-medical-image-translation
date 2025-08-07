@@ -76,6 +76,8 @@ Brain_MR_train_val_test
 │   │   ├── ...
 ```
 ### Breast
+![Alt text](https://github.com/YifanChen-thu/flow-matching-medical-image-translation/blob/main/TCGA-AO-A03M.png)
+
 ```markdown
 包含三个公开乳腺癌数据集，已经按照比例做了合并（.mat格式版本）--> 后面会数据处理成nii版本
 Breast_MR_train_val_test
