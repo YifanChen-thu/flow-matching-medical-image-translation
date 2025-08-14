@@ -393,10 +393,9 @@ Stomach_Colon_Liver_Pancreas_CT_train_val_test
 | paper | 会议/期刊 | dataset | 分类 | 器官 |
 |---------|---------|---------|---------|---------|
 |Introducing 3D Representation for Medical Image Volume-to-Volume Translation via Score Fusion.[[paper](https://arxiv.org/pdf/2501.07430)]|20250206||||
-|DDFM: Denoising Diffusion Model for Multi-Modality Image Fusion.[[paper](https://arxiv.org/pdf/2303.06840)][[code](https://github.com/Zhaozixiang1228/MMIF-DDFM)]|ICCV23 Oral(no train code)||||
-|.[[paper]()][[code]()]|||||
-|.[[paper]()][[code]()]|||||
 |Deterministic Medical Image Translation via High-fidelity Brownian Bridges (HiFi‑BBrg).[[paper](https://arxiv.org/pdf/2503.22531)]|arxiv20250308||||
+|DDFM: Denoising Diffusion Model for Multi-Modality Image Fusion.[[paper](https://arxiv.org/pdf/2303.06840)][[code](https://github.com/Zhaozixiang1228/MMIF-DDFM)](no train code)|ICCV23 Oral||||
+
 
 ### Flow ODE
 | paper | 会议/期刊 | dataset | 分类 | 器官 |
