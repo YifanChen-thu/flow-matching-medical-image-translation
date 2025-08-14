@@ -382,6 +382,7 @@ Stomach_Colon_Liver_Pancreas_CT_train_val_test
 ### flow-matching
 | paper | 会议/期刊 | dataset | 分类 | 器官 |
 |---------|---------|---------|---------|---------|
+|awesome-flow-matching.[[code](https://github.com/dongzhuoyao/awesome-flow-matching)]|||||
 |Benchmarking GANs, Diffusion Models, and Flow Matching for T1w-to-T2w MRI Translation.[[paper](https://arxiv.org/pdf/2507.14575)][[code](https://github.com/AndreaMoschetto/medical-I2I-benchmark)]|arxiv20250719||||
 |LBM: Latent Bridge Matching for Fast Image-to-Image Translation.[[paper](https://arxiv.org/pdf/2503.07535)][[code](https://github.com/gojasper/LBM)]|arxiv20250310||||
 |Flow Matching for Medical Image Synthesis: Bridging the Gap Between Speed and Quality.[[paper](https://arxiv.org/pdf/2503.00266)][[code](https://github.com/milad1378yz/MOTFM)]|arxiv20250301||||
@@ -411,7 +412,7 @@ Stomach_Colon_Liver_Pancreas_CT_train_val_test
 |One Model to Synthesize Them All: Multi-contrast Multi-scale Transformer for Missing Data Imputation.[[paper](https://www.semanticscholar.org/reader/04b67ac881b8285a55be147785c5e67eb544cc99)]|TMI2023||||
 |.[[paper]()][[code]()]|||||
 |.[[paper]()][[code]()]|||||
-|.[[paper]()][[code]()]|||||
+
 
 ### mamba
 | paper | 会议/期刊 | dataset | 分类 | 器官 |
