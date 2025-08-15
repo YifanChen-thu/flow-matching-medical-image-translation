@@ -27,7 +27,7 @@ from src import utils_usage
 from src import init_autoencoder, KLDivergenceLoss, init_patch_discriminator, GradientAccumulation
 from utils.utils_image import save_image, pad_to_shape
 
-from src.brats_dataloader import get_brats_dataloader
+from src.ct_dataloader import get_ct_dataloader
 from accelerate import Accelerator
 
 torch.autograd.set_detect_anomaly(True)
@@ -179,13 +179,9 @@ def validate_model(model, dataloader, device, save_root=None, max_batches=6,
     print(f"{step_name} - AVG_PSNR: {np.mean(avg_psnr):.2f}, AVG_SSIM: {np.mean(avg_ssim):.4f}")
 
 
-
-# image_key    = ["t1n"]   # ["t1c", "t1n", "t2w", "t2f"]
-
-# image_key    = ["t1c", "t1n", "t2w", "t2f"]
-
-
 message = "kl_01"
+
+
 
 if __name__ == '__main__':
     image_key = args.input_modality

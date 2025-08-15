@@ -9,6 +9,8 @@ from .utils_yaml import load_yaml
 parser = argparse.ArgumentParser()
 
 # ---------------- Dataset ----------------
+parser.add_argument('--task', type=str, default="train", help="Name of the task to run")
+parser.add_argument('--data_file', type=str, default="data.txt", help="Path to the input data file")
 parser.add_argument('--config', default="", type=str, help="Directory to store cached data")
 parser.add_argument('--num_workers', default=12, type=int, help='Number of workers for DataLoader')
 parser.add_argument('--num_samples', default=2, type=int, help='Number of samples per CT scan')
