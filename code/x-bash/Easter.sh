@@ -16,9 +16,10 @@ gpu=6,7
 
 CUDA_VISIBLE_DEVICES=$gpu accelerate launch --multi_gpu --mixed_precision fp16 --main_process_port 19150 \
       python train_ct_autoencoder.py --gpu $gpu  \
-      --data_file $data_files   --task  $task \
+      --dataset_csv $data_files   --task  $task \
       --batch_size 3  --n_epochs  200    --lr 1e-5 \
-      --cache  ${temp}/cache/CT_single      --input_modality   CT CTC     \
+      --cache  ${temp}/cache/CT_single      \
+      --input_modality   CT CTC    --missing_modality   CTC  \
       --output_dir  ${temp}/checkpoint/CT/AE         --DEBUG      
 
 

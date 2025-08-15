@@ -10,12 +10,13 @@ parser = argparse.ArgumentParser()
 
 # ---------------- Dataset ----------------
 parser.add_argument('--task', type=str, default="train", help="Name of the task to run")
-parser.add_argument('--data_file', type=str, default="data.txt", help="Path to the input data file")
+parser.add_argument('--dataset_csv', type=str, default="data.txt", help="Path to the input data file")
 parser.add_argument('--config', default="", type=str, help="Directory to store cached data")
 parser.add_argument('--num_workers', default=12, type=int, help='Number of workers for DataLoader')
 parser.add_argument('--num_samples', default=2, type=int, help='Number of samples per CT scan')
 parser.add_argument('--input_modality', nargs='+', required=True, help='List of modalities (e.g., t1c t1n t2w t2f)')
-   
+parser.add_argument('--missing_modality', nargs='+', required=True, help='List of modalities (e.g., t1c t1n t2w t2f)')
+
 
 # ---------------- Paths ----------------
 parser.add_argument('--data_dir', default="", type=str, help="Directory containing the dataset")

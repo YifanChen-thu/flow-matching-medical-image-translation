@@ -28,8 +28,9 @@ from src import utils_usage
 from src import init_autoencoder, KLDivergenceLoss, init_patch_discriminator, GradientAccumulation
 from utils.utils_image import save_image, pad_to_shape
 
-from src.ct_train_dataloader import get_ct_dataloader
+from src.bce_train_dataloader import get_bce_dataloader
 from accelerate import Accelerator
+import torch.nn as nn
 
 torch.autograd.set_detect_anomaly(True)
 
@@ -38,7 +39,6 @@ warnings.filterwarnings("ignore")
 set_determinism(0)
 # DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 save_epoch = 1
-import torch.nn as nn
 
 accelerator = Accelerator()
 DEVICE = accelerator.device
@@ -134,11 +134,9 @@ def validate_model(model, dataloader, device, image_save_root=None, max_batches=
                 break
             if idx >= max_batches:
                 break
-
             # images = torch.cat(batch[image_key], dim=1).to(DEVICE)
             images = torch.cat([batch[key] for key in image_key], dim=1).to(DEVICE)
-            broken_images, mask = perform_broken_image(images,
-                                                       broken_channel=[1 if i in missing_modality else 1 for i in image_key],
+            broken_images, mask = perform_broken_image(images, broken_channel=(image_key == "ctc"),
                                                        ratio=0.5)  # TODO learn with other target or not
 
             reconstruction, z_mu, z_sigma = model(broken_images)
@@ -152,7 +150,7 @@ def validate_model(model, dataloader, device, image_save_root=None, max_batches=
             # Compute PSNR and SSIM
             psnr_val = utils_metric.psnr_3d(image_np, recon_np)
             # Batch 1/251: image shape (1, 1, 96, 96, 96), recon shape (1, 1, 96, 96, 96)
-            ssim_val = utils_metric.ssim_3d(image_np, recon_np, in_channels=1)
+            ssim_val = utils_metric.ssim_3d_multichannel(image_np, recon_np, in_channels=1) 
 
             avg_psnr.append(psnr_val)
             avg_ssim.append(ssim_val)
@@ -169,6 +167,7 @@ def validate_model(model, dataloader, device, image_save_root=None, max_batches=
                     # Concatenate orig and recon for each of the 4 slices → [4, 2H, W]
                     combined_slices = [np.concatenate([orig[i], recon[i]], axis=1) for i in range(image_mid.shape[1])]  # each is [H, 2W]
 
+                    # Stack them vertically → [2H, 4W]
                     combined = np.concatenate(combined_slices, axis=0)  # [4H, 2W]
 
                     save_path = os.path.join(image_save_root, f"{step_name}_img_{idx}_{b}.jpg")
@@ -177,9 +176,8 @@ def validate_model(model, dataloader, device, image_save_root=None, max_batches=
     print(f"{step_name} - AVG_PSNR: {np.mean(avg_psnr):.2f}, AVG_SSIM: {np.mean(avg_ssim):.4f}")
 
 
-message = ""
+message = "kl_01"
 
-missing_modality = args.missing_modality
 
 if __name__ == '__main__':
     image_key = args.input_modality
@@ -199,15 +197,15 @@ if __name__ == '__main__':
     os.makedirs(args.output_dir, exist_ok=True)
 
     # ---------------- Define Dataloader ----------------
-    in_channels = len(image_key)  # 4 channels:
+    in_channels = len(image_key)  # 4 channels: t1c, t1n, t2w, t2f
     dimension = 3
-    spatial_size = (96, 96, 96)  # (128, 128, 128)
-    key_to_load  = [""]          # ["mask", "density"]
+    spatial_size = (96, 96, 96)  #(128, 128, 128)
+    key_to_load  = [""] #["mask", "density"]
     key_to_load.extend(image_key)
 
-    train_loader     = get_ct_dataloader(args, mode="train", batch_size=args.batch_size,
+    train_loader     = get_bce_dataloader(args, mode="train", batch_size=args.batch_size,
                                             spatial_size=spatial_size, key_to_load=key_to_load, cache_dir=args.cache_dir)
-    test_loader      = get_ct_dataloader(args, mode="test",  batch_size=args.batch_size,
+    test_loader      = get_bce_dataloader(args, mode="test",  batch_size=args.batch_size,
                                             spatial_size=spatial_size, key_to_load=key_to_load, cache_dir=args.cache_dir)
 
 
@@ -229,6 +227,7 @@ if __name__ == '__main__':
             new_key = k.replace("module.", "") if k.startswith("module.") else k
             new_state_dict[new_key] = v
         return new_state_dict
+
 
     if args.resume:
         dis_path = os.path.join(args.output_dir, f'dis-{args.resume}.pth')
@@ -256,9 +255,10 @@ if __name__ == '__main__':
     adv_loss_fn = disable_inplace_activations(adv_loss_fn)
     adv_loss_fn.activation = torch.nn.LeakyReLU(negative_slope=0.05, inplace=False)  # <- safe
 
+
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        perc_loss_fn = PerceptualLoss(spatial_dims=dimension,
+        perc_loss_fn = PerceptualLoss(spatial_dims=dimension,  # 如果您的网络是3D的，请确认输入维度。如果是2D图像，请用spatial_dims=2
                                       network_type="squeeze",
                                       is_fake_3d=True,
                                       fake_3d_ratio=0.2).to(DEVICE)
@@ -283,15 +283,14 @@ if __name__ == '__main__':
 
     # Test at starter
     validate_model(autoencoder, test_loader, DEVICE,
-                   image_save_root=None, max_batches=6, step_name="Start",
-                   image_key=image_key, image_key_str=image_key_str)
+                   image_save_root=None, max_batches=6, step_name="Start", image_key=image_key, image_key_str=image_key_str)
 
     for epoch in range(args.n_epochs):
 
         if DEVICE == "cuda":
             print("EPOCH: ", epoch)
             print(f"Allocated GPU memory: {torch.cuda.memory_allocated() / 1024 ** 2:.2f} MB")
-            print(f"Cached GPU memory:    {torch.cuda.memory_reserved() / 1024 ** 2:.2f} MB")
+            print(f"Cached GPU memory: {torch.cuda.memory_reserved() / 1024 ** 2:.2f} MB")
 
         autoencoder.train()
         discriminator.train()
@@ -307,8 +306,7 @@ if __name__ == '__main__':
             # mask   = batch["mask"].to(DEVICE)
 
             # Mask
-            broken_images, mask = perform_broken_image(images,
-                                        broken_channel=[1 if i in missing_modality else 1 for i in image_key], ratio=0.5)
+            broken_images, mask = perform_broken_image(images, broken_channel=(image_key=="ctc"), ratio=0.5)  # TODO learn with other target or not
 
             # with autocast(enabled=True):
             with accelerator.autocast():
@@ -319,13 +317,18 @@ if __name__ == '__main__':
                     rec_loss = l1_loss_fn(reconstruction, images)
                 else:
                     mask = mask.repeat(mask.shape[0], *images.shape[1:])
-                    rec_loss = torch.abs(reconstruction * mask - images * mask).sum() / torch.sum(mask)
+                    rec_loss = torch.abs(reconstruction * mask- images * mask).sum() / torch.sum(mask)
 
                 kld_loss = kl_weight * kl_loss_fn(z_mu, z_sigma)
+
+                # ---------- KL channel divergence loss ----------
+                # if mask.dim() == 4:
+                #     mask = mask.squeeze(1)  # convert to (B, H, W) if needed
 
                 # Make sure mask is boolean and same device
                 gen_loss = adv_weight * adv_loss_fn(logits_fake, target_is_real=True, for_discriminator=False)
                 loss_g = rec_loss + kld_loss + gen_loss  # + per_loss
+
 
                 progress_bar.set_postfix(loss_g=loss_g.item() if hasattr(loss_g, "item") else loss_g,
                                          rec_loss=rec_loss.item() if hasattr(rec_loss, "item") else rec_loss,
