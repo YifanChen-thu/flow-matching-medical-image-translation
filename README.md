@@ -424,6 +424,12 @@ Stomach_Colon_Liver_Pancreas_CT_train_val_test
 |.[[paper]()][[code]()]|||||
 
 
+#Citation
+```markdown
+citation
+
+```
+
 
 
 
