@@ -46,28 +46,15 @@ def ssim_3d(pred, target):
     """
     pred, target: torch.Tensor of shape (1, 1, D, H, W)
     """
-    # pred   = pred.squeeze()   #.cpu().numpy()
-    # target = target.squeeze() #.cpu().numpy()
-    pred = torch.from_numpy(pred[None, None, ...]).float()
-    target = torch.from_numpy(target[None, None, ...]).float()
+    pred = torch.from_numpy(pred).float()
+    target = torch.from_numpy(target).float()
 
-    # SSIM (scikit-image, for 3D: need to loop over slices)
     # D, H, W
     ssim_total = 0
     count = 0
 
     ssim_value = pytorch_msssim.ssim(pred, target, data_range=1.0)
     # ssim_value = pytorch_msssim.ms_ssim(pred, target, data_range=1.0, win_size=7)
-
-    # print(ssim_val, ssim_value)
-
-    # for i in range(pred.shape[0]):
-    #     ssim_slice = structural_similarity(
-    #         target[i], pred[i], data_range=1.0
-    #     )
-    #     ssim_total += ssim_slice
-    #     count += 1
-    # ssim_value = ssim_total / count
 
     return ssim_value
 

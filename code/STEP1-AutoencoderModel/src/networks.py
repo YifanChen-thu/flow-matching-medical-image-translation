@@ -172,7 +172,6 @@ def init_autoencoder(in_channels=1) -> nn.Module:
     checkpoint_autoencoder = torch.load(args.trained_autoencoder_path, weights_only=True, map_location="cpu")
     autoencoder.load_state_dict(checkpoint_autoencoder)
 
-    # print("Step up in_channels = ", in_channels)
 
     # Patch first Conv3d (input layer)
     first = autoencoder.encoder.blocks[0].conv.conv

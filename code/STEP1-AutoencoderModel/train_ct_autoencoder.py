@@ -92,7 +92,7 @@ def to_numpy_image(tensor):
     return array
 
 
-def  perform_broken_image(images, broken_channel, ratio=0.5):
+def perform_broken_image(images, broken_channel, ratio=0.5):
     # broken_channel is a one_hot mask
     broken_channel = np.array(broken_channel)
     B, C, H, W, D = images.shape
@@ -128,8 +128,9 @@ def validate_model(model, dataloader, device, image_save_root=None, max_batches=
         print("\nLayer-wise input and output shapes:")
         print_model_shapes(model, input_size=(2, len(image_key), 96, 96, 96))
 
-    with torch.no_grad(), accelerator.autocast():
+    with torch.no_grad():
         for idx, batch in enumerate(dataloader):
+
             if args.DEBUG and idx >= 5:
                 break
             if idx >= max_batches:
@@ -138,10 +139,12 @@ def validate_model(model, dataloader, device, image_save_root=None, max_batches=
             # images = torch.cat(batch[image_key], dim=1).to(DEVICE)
             images = torch.cat([batch[key] for key in image_key], dim=1).to(DEVICE)
             broken_images, mask = perform_broken_image(images,
-                                                       broken_channel=[1 if i in missing_modality else 1 for i in image_key],
+                                                       broken_channel=[1 if i in missing_modality else 0 for i in image_key],
                                                        ratio=0.5)  # TODO learn with other target or not
+            # broken_images = broken_images.float()
 
-            reconstruction, z_mu, z_sigma = model(broken_images)
+            with accelerator.autocast():
+                reconstruction, z_mu, z_sigma = model(broken_images)
 
             # Move to CPU for metrics and visualization
             image_np = images.cpu().numpy()
@@ -151,8 +154,7 @@ def validate_model(model, dataloader, device, image_save_root=None, max_batches=
 
             # Compute PSNR and SSIM
             psnr_val = utils_metric.psnr_3d(image_np, recon_np)
-            # Batch 1/251: image shape (1, 1, 96, 96, 96), recon shape (1, 1, 96, 96, 96)
-            ssim_val = utils_metric.ssim_3d(image_np, recon_np, in_channels=1)
+            ssim_val = utils_metric.ssim_3d(image_np, recon_np)
 
             avg_psnr.append(psnr_val)
             avg_ssim.append(ssim_val)
@@ -201,8 +203,8 @@ if __name__ == '__main__':
     # ---------------- Define Dataloader ----------------
     in_channels = len(image_key)  # 4 channels:
     dimension = 3
-    spatial_size = (96, 96, 96)  # (128, 128, 128)
-    key_to_load  = [""]          # ["mask", "density"]
+    spatial_size = (96, 96, 32)  # (128, 128, 128)
+    key_to_load  = []          # ["mask", "density"]
     key_to_load.extend(image_key)
 
     train_loader     = get_ct_dataloader(args, mode="train", batch_size=args.batch_size,
@@ -213,7 +215,7 @@ if __name__ == '__main__':
 
     # ---------------- Define AutoEncoder Model ----------------
     print("Setting up Autoencoder model...")
-    autoencoder = init_autoencoder(in_channels).to(DEVICE)
+    autoencoder = init_autoencoder(in_channels).to(DEVICE).float()
     print("Finish setting up...")
 
     discriminator = init_patch_discriminator(args.disc_ckpt, spatial_dims=dimension,
@@ -308,7 +310,7 @@ if __name__ == '__main__':
 
             # Mask
             broken_images, mask = perform_broken_image(images,
-                                        broken_channel=[1 if i in missing_modality else 1 for i in image_key], ratio=0.5)
+                                        broken_channel=[1 if i in missing_modality else 0 for i in image_key], ratio=0.5)
 
             # with autocast(enabled=True):
             with accelerator.autocast():
@@ -373,7 +375,7 @@ if __name__ == '__main__':
 
             total_counter += 1
 
-        _image_save_root = f"{image_save_root}/epoch_{}".format(epoch)
+        _image_save_root = f"{image_save_root}/epoch_{epoch}"
         os.makedirs(_image_save_root, exist_ok=True)
 
         autoencoder.eval()
