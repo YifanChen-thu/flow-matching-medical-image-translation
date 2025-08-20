@@ -6,6 +6,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")
 from utils import args
 os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
 
+import torch
 import warnings
 import numpy as np
 import torch
@@ -27,8 +28,9 @@ from src import utils_usage
 from src import init_autoencoder, KLDivergenceLoss, init_patch_discriminator, GradientAccumulation
 from utils.utils_image import save_image, pad_to_shape
 
-from src.brats_dataloader import get_brats_dataloader
+from src.bce_train_dataloader import get_bce_dataloader
 from accelerate import Accelerator
+import torch.nn as nn
 
 torch.autograd.set_detect_anomaly(True)
 
@@ -37,15 +39,9 @@ warnings.filterwarnings("ignore")
 set_determinism(0)
 # DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 save_epoch = 1
-import torch.nn as nn
 
 accelerator = Accelerator()
 DEVICE = accelerator.device
-
-
-# import os
-# os.environ["TMPDIR"] = "~/HDD_8T_2/temp"
-
 
 
 ACTIVATION_CLASSES = (nn.ReLU, nn.LeakyReLU, nn.ELU, nn.PReLU, nn.RReLU)
@@ -61,9 +57,8 @@ def disable_inplace_activations(model: nn.Module):
     return model
 
 
-
 def print_model_shapes(model, input_size):
-    import torch
+
     x = torch.randn(input_size, dtype=torch.float16).to(DEVICE)
     hooks = []
 
@@ -97,30 +92,30 @@ def to_numpy_image(tensor):
     return array
 
 
-def perform_mask_image(images, c_num_keep=-1):
+def  perform_broken_image(images, broken_channel, ratio=0.5):
+    # broken_channel is a one_hot mask
+    broken_channel = np.array(broken_channel)
     B, C, H, W, D = images.shape
     mask = torch.zeros((B, C), device=images.device)
 
     for i in range(B):
-        if c_num_keep == -1:
-            num_keep = torch.randint(1, C, (1,)).item()
+        if np.random.rand() < ratio:
+            keep_indices = 1 - broken_channel
         else:
-            num_keep = c_num_keep
-
-        keep_indices = torch.randperm(C)[:num_keep]
+            keep_indices = np.ones_like(broken_channel)
         mask[i, keep_indices] = 1
 
     mask = mask[:, :, None, None, None]  # [B, C, 1, 1, 1]
 
     mask_images = images * mask 
-    return mask_images
+    return mask_images, mask
 
 
-def validate_model(model, dataloader, device, save_root=None, max_batches=6,
+def validate_model(model, dataloader, device, image_save_root=None, max_batches=6,
                    step_name="", image_key="source", image_key_str=None):
     model.eval()
-    if save_root is not None:
-        os.makedirs(save_root, exist_ok=True)
+    if image_save_root is not None:
+        os.makedirs(image_save_root, exist_ok=True)
 
     avg_psnr, avg_ssim = [], []
 
@@ -141,8 +136,10 @@ def validate_model(model, dataloader, device, save_root=None, max_batches=6,
                 break
             # images = torch.cat(batch[image_key], dim=1).to(DEVICE)
             images = torch.cat([batch[key] for key in image_key], dim=1).to(DEVICE)
+            broken_images, mask = perform_broken_image(images, broken_channel=(image_key == "ctc"),
+                                                       ratio=0.5)  # TODO learn with other target or not
 
-            reconstruction, z_mu, z_sigma = model(images)
+            reconstruction, z_mu, z_sigma = model(broken_images)
 
             # Move to CPU for metrics and visualization
             image_np = images.cpu().numpy()
@@ -162,7 +159,7 @@ def validate_model(model, dataloader, device, save_root=None, max_batches=6,
             middle_slice = image_np.shape[2] // 2
             image_mid = image_np[:, :, middle_slice, :, :]  # B, C, H, W
             recon_mid = recon_np[:, :, middle_slice, :, :]
-            if save_root is not None:
+            if image_save_root is not None:
                 for b in range(image_mid.shape[0]):
                     orig  = image_mid[b]  # [4, H, W]
                     recon = recon_mid[b]  # [4, H, W]
@@ -173,28 +170,26 @@ def validate_model(model, dataloader, device, save_root=None, max_batches=6,
                     # Stack them vertically → [2H, 4W]
                     combined = np.concatenate(combined_slices, axis=0)  # [4H, 2W]
 
-                    save_path = os.path.join(save_root, f"{step_name}_img_{idx}_{b}.jpg")
+                    save_path = os.path.join(image_save_root, f"{step_name}_img_{idx}_{b}.jpg")
                     save_image(save_path, combined)
 
     print(f"{step_name} - AVG_PSNR: {np.mean(avg_psnr):.2f}, AVG_SSIM: {np.mean(avg_ssim):.4f}")
 
 
-
-# image_key    = ["t1n"]   # ["t1c", "t1n", "t2w", "t2f"]
-
-# image_key    = ["t1c", "t1n", "t2w", "t2f"]
-
-
 message = "kl_01"
+
 
 if __name__ == '__main__':
     image_key = args.input_modality
-
+    
+    # Image
+    image_save_root = "./image_result/step1_ae_train/"
+    os.makedirs(image_save_root, exist_ok=True)
+    
     if isinstance(image_key, (list, tuple)):
         image_key_str = "-".join(image_key)
     else:
         image_key_str = str(image_key)
-
     if message != "":
         image_key_str += f"-{message}"
 
@@ -205,15 +200,12 @@ if __name__ == '__main__':
     in_channels = len(image_key)  # 4 channels: t1c, t1n, t2w, t2f
     dimension = 3
     spatial_size = (96, 96, 96)  #(128, 128, 128)
-    # spatial_size = (64, 64, 64)  # (128, 128, 128)
-    key_to_load  = ["mask"] #["mask", "density"]
-
-    
+    key_to_load  = [""] #["mask", "density"]
     key_to_load.extend(image_key)
 
-    train_loader     = get_brats_dataloader(args.data_file, mode="train", batch_size=args.batch_size,
+    train_loader     = get_bce_dataloader(args, mode="train", batch_size=args.batch_size,
                                             spatial_size=spatial_size, key_to_load=key_to_load, cache_dir=args.cache_dir)
-    test_loader      = get_brats_dataloader(args.data_file, mode="test",  batch_size=args.batch_size,
+    test_loader      = get_bce_dataloader(args, mode="test",  batch_size=args.batch_size,
                                             spatial_size=spatial_size, key_to_load=key_to_load, cache_dir=args.cache_dir)
 
 
@@ -221,8 +213,6 @@ if __name__ == '__main__':
     print("Setting up Autoencoder model...")
     autoencoder = init_autoencoder(in_channels).to(DEVICE)
     print("Finish setting up...")
-
-
 
     discriminator = init_patch_discriminator(args.disc_ckpt, spatial_dims=dimension,
                                              in_channels=in_channels, num_layers_d=3).to(DEVICE)
@@ -253,6 +243,7 @@ if __name__ == '__main__':
             print(f"Autoencoder checkpoint not found: {gen_path}. Starting from scratch.")
         print("Resuming from checkpoint:", gen_path)
 
+    use_mask_loss = False
 
     adv_weight = 0.025
     perceptual_weight = 0.001
@@ -262,7 +253,6 @@ if __name__ == '__main__':
     kl_loss_fn  = KLDivergenceLoss()
     adv_loss_fn = PatchAdversarialLoss(criterion="least_squares")
     adv_loss_fn = disable_inplace_activations(adv_loss_fn)
-
     adv_loss_fn.activation = torch.nn.LeakyReLU(negative_slope=0.05, inplace=False)  # <- safe
 
 
@@ -286,9 +276,6 @@ if __name__ == '__main__':
     writer  = SummaryWriter()
     total_counter = 0
 
-    save_root = "./image_result/step1_ae_train/"
-    os.makedirs(save_root, exist_ok=True)
-
     # ---------------- Prepare for Training ----------------
     autoencoder, discriminator, optimizer_g, optimizer_d, train_loader, adv_loss_fn = accelerator.prepare(
         autoencoder, discriminator, optimizer_g, optimizer_d, train_loader, adv_loss_fn
@@ -296,7 +283,7 @@ if __name__ == '__main__':
 
     # Test at starter
     validate_model(autoencoder, test_loader, DEVICE,
-                   save_root=None, max_batches=6, step_name="Start", image_key=image_key, image_key_str=image_key_str)
+                   image_save_root=None, max_batches=6, step_name="Start", image_key=image_key, image_key_str=image_key_str)
 
     for epoch in range(args.n_epochs):
 
@@ -312,72 +299,41 @@ if __name__ == '__main__':
         progress_bar.set_description(f'Epoch {epoch}')
 
         for step, batch in progress_bar:
-            # if step > 100: break
             if args.DEBUG and step >= 5:
                 break
 
             images = torch.cat([batch[key] for key in image_key], dim=1).to(DEVICE)
-            mask   = batch["mask"].to(DEVICE)
+            # mask   = batch["mask"].to(DEVICE)
 
             # Mask
-            mask_images = perform_mask_image(images, c_num_keep=-1)  # TODO learn with other target or not
-            # image = mask_images
-            
+            broken_images, mask = perform_broken_image(images, broken_channel=(image_key=="ctc"), ratio=0.5)  # TODO learn with other target or not
 
             # with autocast(enabled=True):
             with accelerator.autocast():
-                reconstruction, z_mu, z_sigma = autoencoder(mask_images)  # Masked
+                reconstruction, z_mu, z_sigma = autoencoder(broken_images)  # Masked
                 logits_fake = discriminator(reconstruction.contiguous())[-1]
 
-                rec_loss = l1_loss_fn(reconstruction, images)
+                if not use_mask_loss:
+                    rec_loss = l1_loss_fn(reconstruction, images)
+                else:
+                    mask = mask.repeat(mask.shape[0], *images.shape[1:])
+                    rec_loss = torch.abs(reconstruction * mask- images * mask).sum() / torch.sum(mask)
+
                 kld_loss = kl_weight * kl_loss_fn(z_mu, z_sigma)
 
                 # ---------- KL channel divergence loss ----------
-                if mask.dim() == 4:
-                    mask = mask.squeeze(1)  # convert to (B, H, W) if needed
+                # if mask.dim() == 4:
+                #     mask = mask.squeeze(1)  # convert to (B, H, W) if needed
 
                 # Make sure mask is boolean and same device
-                valid_mask = (mask >= 0).to(DEVICE)  
-
-
-                use_chamnnel_loss = False
-
-                if use_chamnnel_loss and len(image_key) > 1:
-                    # Compute per-pixel KL divergence
-                    recon_log_prob = F.log_softmax(reconstruction, dim=1)  # log(P)
-                    images_prob    = F.softmax(images, dim=1)                 # Q
-
-                    # Compute per-pixel KL divergence (shape: B, C, H, W)
-                    kl_div = F.kl_div(recon_log_prob, images_prob, reduction='none', log_target=False)
-
-                    kl_map = kl_div.sum(dim=1)
-
-                    kl_map_masked = kl_map * valid_mask
-                    masked_mean   = kl_map_masked.sum() / valid_mask.sum().clamp(min=1)
-
-                    # Final weighted KL loss
-                    kl_channel_weight = 0.1  # 0.1
-                    channel_kl_loss = masked_mean * kl_channel_weight
-
-                else:
-                    channel_kl_loss = torch.tensor(0.0, device=DEVICE)
-
-
-
-                # per_loss = perceptual_weight * perc_loss_fn(reconstruction, images)
-                gen_loss = adv_weight * adv_loss_fn(logits_fake, target_is_real=True, for_discriminator=False) 
-
-                loss_g = rec_loss + kld_loss + gen_loss + channel_kl_loss  # + per_loss
+                gen_loss = adv_weight * adv_loss_fn(logits_fake, target_is_real=True, for_discriminator=False)
+                loss_g = rec_loss + kld_loss + gen_loss  # + per_loss
 
 
                 progress_bar.set_postfix(loss_g=loss_g.item() if hasattr(loss_g, "item") else loss_g,
                                          rec_loss=rec_loss.item() if hasattr(rec_loss, "item") else rec_loss,
                                          kld_loss=kld_loss.item() if hasattr(kld_loss, "item") else kld_loss,
-                                         gen_loss=gen_loss.item() if hasattr(gen_loss, "item") else gen_loss,
-                                         channel_kl=channel_kl_loss.item() if hasattr(channel_kl_loss, "item") else channel_kl_loss)
-
-
-                    # print(f"rec_loss: {rec_loss}, kld_loss: {kld_loss}, gen_loss: {gen_loss}")
+                                         gen_loss=gen_loss.item() if hasattr(gen_loss, "item") else gen_loss)
 
             accelerator.backward(loss_g)
             optimizer_g.step()
@@ -420,16 +376,14 @@ if __name__ == '__main__':
 
             total_counter += 1
 
-        save_root = "./image_result/step1_ae_train/epoch_{}".format(epoch)
-        os.makedirs(save_root, exist_ok=True)
+        _image_save_root = f"{image_save_root}/epoch_{}".format(epoch)
+        os.makedirs(_image_save_root, exist_ok=True)
 
         autoencoder.eval()
         validate_model(autoencoder, test_loader, DEVICE,
-                       save_root=save_root, max_batches=6,
+                       image_save_root=_image_save_root, max_batches=6,
                        step_name="Epoch_{}".format(epoch), image_key=image_key)
 
-
-  
         
         # 保存模型
         if (epoch + 1) % save_epoch == 0 and accelerator.is_main_process:
@@ -441,7 +395,6 @@ if __name__ == '__main__':
 
             print("Saving models to: ",
                   os.path.join(args.output_dir, f'ae-{epoch + 1}-{image_key_str}.pth'))
-            
 
             try:
                 os.remove(os.path.join(args.output_dir, f'dis-{epoch + 1 - 3}-{image_key_str}.pth'))
@@ -454,8 +407,6 @@ if __name__ == '__main__':
         torch.cuda.empty_cache()
 
 
-torch.save(autoencoder.state_dict(),
-           os.path.join(args.output_dir, f'ae-final-{image_key_str}.pth'))
-
+torch.save(autoencoder.state_dict(), os.path.join(args.output_dir, f'ae-final-{image_key_str}.pth'))
 print("Training finished.")
 
