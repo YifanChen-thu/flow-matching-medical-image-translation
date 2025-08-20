@@ -12,7 +12,8 @@ data_files="../data/${task}_pair.csv"
 temp=/date/hao/FM
 
 # -------------------- Train AE -----------------------
-gpu=0,1
+gpu=2,3,5
+data_files=../data/files/CT_pair.csv
 
 CUDA_VISIBLE_DEVICES=$gpu accelerate launch --multi_gpu --mixed_precision fp16 --main_process_port 19150 \
       train_ct_autoencoder.py --gpu $gpu  \

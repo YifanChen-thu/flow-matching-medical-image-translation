@@ -61,12 +61,22 @@ def get_ct_dataloader(args,
 
     
 
+            # EnsureTypeD(keys=imagekeys, dtype="float32"),
+            # LambdaD(keys=imagekeys, func=lambda x: x.clone()),
+
+            
+
+    RESOLUTION = (1.5, 1.5, 1.5)
+    # RESOLUTION = (2.0, 2.0, 2.0)
     # Define transforms
     transforms = [
+        
         LoadImaged(keys=key_to_load),
         EnsureChannelFirstd(keys=key_to_load),
         Orientationd(keys=key_to_load, axcodes="RAS"),
         ScaleIntensityD(minv=0, maxv=1, keys=image_keys),  # Normalize all but mask
+        
+
         crop_transform,
         ResizeWithPadOrCropd(
             keys=key_to_load,

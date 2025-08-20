@@ -151,7 +151,6 @@ def validate_model(model, dataloader, device, image_save_root=None, max_batches=
             recon_np = reconstruction.cpu().numpy()
 
             # print(f"Batch {idx + 1}/{len(dataloader)}: image shape {image_np.shape}, recon shape {recon_np.shape}")
-
             # Compute PSNR and SSIM
             psnr_val = utils_metric.psnr_3d(image_np, recon_np)
             ssim_val = utils_metric.ssim_3d(image_np, recon_np)
@@ -160,9 +159,10 @@ def validate_model(model, dataloader, device, image_save_root=None, max_batches=
             avg_ssim.append(ssim_val)
 
             # Save middle slice comparison image
-            middle_slice = image_np.shape[2] // 2
-            image_mid = image_np[:, :, middle_slice, :, :]  # B, C, H, W
-            recon_mid = recon_np[:, :, middle_slice, :, :]
+            middle_slice = image_np.shape[-1] // 2
+            image_mid = image_np[:, :, :, :, middle_slice]  # B, C, H, W
+            recon_mid = recon_np[:, :, :, :, middle_slice]
+            
             if image_save_root is not None:
                 for b in range(image_mid.shape[0]):
                     orig  = image_mid[b]  # [4, H, W]
@@ -203,7 +203,8 @@ if __name__ == '__main__':
     # ---------------- Define Dataloader ----------------
     in_channels = len(image_key)  # 4 channels:
     dimension = 3
-    spatial_size = (96, 96, 32)  # (128, 128, 128)
+    spatial_size = (96, 96, 64)  # (128, 128, 128)
+    
     key_to_load  = []          # ["mask", "density"]
     key_to_load.extend(image_key)
 
@@ -248,9 +249,9 @@ if __name__ == '__main__':
 
     use_mask_loss = False
 
-    adv_weight = 0.025
+    adv_weight        = 0.025
     perceptual_weight = 0.001
-    kl_weight = 1e-7
+    kl_weight         = 1e-7
 
     l1_loss_fn  = L1Loss()
     kl_loss_fn  = KLDivergenceLoss()

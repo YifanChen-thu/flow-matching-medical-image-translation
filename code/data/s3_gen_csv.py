@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 import argparse
 import csv
-import re
+import re, os
 from pathlib import Path
 from collections import defaultdict
+
+import nibabel as nib  # pip install nibabel
 
 # ----------------------------
 # Config
@@ -71,6 +73,9 @@ def write_csv(rows, header, out_path):
         w = csv.DictWriter(f, fieldnames=header)
         w.writeheader()
         for r in rows:
+            # DictWriter can't write sets; ensure Splits is a string
+            if isinstance(r.get("Splits", ""), set):
+                r["Splits"] = ",".join(sorted(r["Splits"]))
             w.writerow(r)
 
 # --- Exam-key extraction ---
@@ -90,7 +95,6 @@ def strip_mr_modality(stem: str) -> str:
     return stem
 
 def ct_exam_key_from_file(file_path: Path):
-    stem = file_path.stem  # preserves ".nii" if .nii.gz; better use name sans suffixes:
     name = file_path.name
     # drop extensions .nii or .nii.gz
     if name.endswith(".nii.gz"):
@@ -118,9 +122,7 @@ def mr_exam_key_from_file(file_path: Path):
     else:
         stem = file_path.stem
     exam = strip_mr_modality(stem)
-    # If exam collapsed to empty, fallback to stem
     exam = exam if exam else stem
-    # Also return which modality we detected
     mod = None
     for k, rx in Brain_MR_KEYS.items():
         if rx.search(stem):
@@ -129,22 +131,85 @@ def mr_exam_key_from_file(file_path: Path):
     return mod, exam
 
 # ----------------------------
-# Indexers (now group by exam)
+# NIfTI stats (header-only; no full data load)
+# ----------------------------
+def nii_stats(path: Path):
+    """
+    Returns dict with:
+      D, H, W (voxel counts)
+      spD, spH, spW (voxel sizes in mm)
+      dtype (on-disk)
+      filesize (bytes)
+    Uses header only; safe for huge volumes.
+    """
+    try:
+        img = nib.load(str(path))
+        shape = img.shape
+        if len(shape) < 3:
+            return {"D": "", "H": "", "W": "", "spD": "", "spH": "", "spW": "", "dtype": "", "filesize": ""}
+        # NIfTI (X,Y,Z,...) -> map to W,H,D for human readability
+        W, H, D = shape[0], shape[1], shape[2]
+        zooms = img.header.get_zooms()
+        
+        # if tuple(round(z, 3) for z in zooms) != (1.0, 1.0, 1.0):
+        #     print(f"[INFO] Non-unit voxel spacing: zooms={zooms}  file={img.get_filename()}")
+
+        spW = zooms[0] if len(zooms) > 0 else ""
+        spH = zooms[1] if len(zooms) > 1 else ""
+        spD = zooms[2] if len(zooms) > 2 else ""
+        dtype = str(img.get_data_dtype())
+        filesize = path.stat().st_size
+        return {"D": D, "H": H, "W": W, "spD": spD, "spH": spH, "spW": spW, "dtype": dtype, "filesize": filesize}
+    except Exception:
+        return {"D": "", "H": "", "W": "", "spD": "", "spH": "", "spW": "", "dtype": "", "filesize": ""}
+
+# ----------------------------
+# Column helpers
+# ----------------------------
+MR_MODS = ["T1", "T1Gd", "T2", "FLAIR", "Mask", "Mask_Correct"]
+CT_MODS = ["CT", "CTC"]
+
+def make_header(task: str):
+    base = ["Dataset", "Subject", "ExamID", "Splits"]
+    mods = MR_MODS if task == "MR" else CT_MODS
+    cols = []
+    for m in mods:
+        cols += [m, f"{m}_D", f"{m}_H", f"{m}_W",
+                 f"{m}_spD", f"{m}_spH", f"{m}_spW",
+                 f"{m}_dtype", f"{m}_filesize"]
+    return base + cols
+
+def init_exam_row(dataset_name: str, subject: str, exam_id: str, task: str):
+    row = {"Dataset": dataset_name, "Subject": subject, "ExamID": exam_id, "Splits": set()}
+    for m in (MR_MODS if task == "MR" else CT_MODS):
+        row[m] = ""
+        row[f"{m}_D"] = row[f"{m}_H"] = row[f"{m}_W"] = ""
+        row[f"{m}_spD"] = row[f"{m}_spH"] = row[f"{m}_spW"] = ""
+        row[f"{m}_dtype"] = ""
+        row[f"{m}_filesize"] = ""
+    return row
+
+def attach_modality(row: dict, mod_name: str, path: Path):
+    """Set file path and header stats for modality."""
+    row[mod_name] = str(path)
+    s = nii_stats(path)
+    row[f"{mod_name}_D"] = s["D"]
+    row[f"{mod_name}_H"] = s["H"]
+    row[f"{mod_name}_W"] = s["W"]
+    row[f"{mod_name}_spD"] = s["spD"]
+    row[f"{mod_name}_spH"] = s["spH"]
+    row[f"{mod_name}_spW"] = s["spW"]
+    row[f"{mod_name}_dtype"] = s["dtype"]
+    row[f"{mod_name}_filesize"] = s["filesize"]
+
+# ----------------------------
+# Indexers (group by exam)
 # ----------------------------
 def index_mr_dataset(dataset_dir: Path, dataset_name: str):
     """
     Build rows per (subject, exam_id).
-    Returns rows and stats.
     """
-    # dict[(subject, exam_id)] -> dict of fields
-    exams = defaultdict(lambda: {
-        "Dataset": dataset_name,
-        "Subject": "",
-        "ExamID": "",
-        "Splits": set(),
-        "T1": "", "T1Gd": "", "T2": "", "FLAIR": "",
-        "Mask": "", "Mask_Correct": ""
-    })
+    exams = {}
 
     for p in dataset_dir.rglob("*"):
         if not p.is_file():
@@ -159,25 +224,18 @@ def index_mr_dataset(dataset_dir: Path, dataset_name: str):
             continue  # skip unknown files
 
         key = (subj, exam_id)
+        if key not in exams:
+            exams[key] = init_exam_row(dataset_name, subj, exam_id, task="MR")
         ex = exams[key]
-        ex["Dataset"] = dataset_name
-        ex["Subject"] = subj
-        ex["ExamID"] = exam_id
         if sp:
             ex["Splits"].add(sp)
 
-        # prefer .nii.gz over .nii if duplicate
-        current = ex.get(mod.upper() if mod in {"t1", "t1gd", "t2", "flair"} else ("Mask_Correct" if mod == "mask_correct" else "Mask"), "")
+        field = mod.upper() if mod in {"t1", "t1gd", "t2", "flair"} else ("Mask_Correct" if mod == "mask_correct" else "Mask")
+        current = ex[field]
         new = str(p)
-        if not current or (current.endswith(".nii") and new.endswith(".nii.gz")):
-            if mod in {"t1", "t1gd", "t2", "flair"}:
-                ex[mod.upper()] = new
-            elif mod == "mask_correct":
-                ex["Mask_Correct"] = new
-            elif mod == "mask":
-                ex["Mask"] = new
+        if (not current) or (current.endswith(".nii") and new.endswith(".nii.gz")):
+            attach_modality(ex, field, p)
 
-    # finalize rows
     rows = []
     complete = 0
     with_mask = 0
@@ -202,13 +260,7 @@ def index_ct_dataset(dataset_dir: Path, dataset_name: str):
     Build rows per (subject, exam_id) where exam_id comes from filename prefix.
     For CT, a 'pair' is an exam that has both CT and CTC.
     """
-    exams = defaultdict(lambda: {
-        "Dataset": dataset_name,
-        "Subject": "",
-        "ExamID": "",
-        "Splits": set(),
-        "CT": "", "CTC": ""
-    })
+    exams = {}
 
     for p in dataset_dir.rglob("*"):
         if not p.is_file():
@@ -223,19 +275,17 @@ def index_ct_dataset(dataset_dir: Path, dataset_name: str):
             continue
 
         key = (subj, exam_id)
+        if key not in exams:
+            exams[key] = init_exam_row(dataset_name, subj, exam_id, task="CT")
         ex = exams[key]
-        ex["Dataset"] = dataset_name
-        ex["Subject"] = subj
-        ex["ExamID"] = exam_id
         if sp:
             ex["Splits"].add(sp)
 
-        # prefer .nii.gz over .nii
         field = "CT" if mod == "ct" else "CTC"
         current = ex[field]
         new = str(p)
-        if not current or (current.endswith(".nii") and new.endswith(".nii.gz")):
-            ex[field] = new
+        if (not current) or (current.endswith(".nii") and new.endswith(".nii.gz")):
+            attach_modality(ex, field, p)
 
     rows = []
     pairs = 0
@@ -263,7 +313,8 @@ def run(task: str, out_csv):
     if task not in {"MR", "CT"}:
         raise SystemExit("TASK must be MR or CT")
 
-    subfolders = MR_SUBFOLDERS if task == "MR" else CT_SUBFOLDERS
+    subfolders = Brain_MR_SUBFOLDERS if task == "MR" else CT_SUBFOLDERS
+    header = make_header(task)
 
     all_rows = []
     per_ds_stats = []
@@ -276,21 +327,17 @@ def run(task: str, out_csv):
 
         if task == "MR":
             rows, stats = index_mr_dataset(ds_path, ds)
-            header = ["Dataset", "Subject", "ExamID", "Splits", "T1", "T1Gd", "T2", "FLAIR", "Mask", "Mask_Correct"]
             print(f"{ds}: subjects={stats['subjects']}, exams={stats['exams']}, complete_exams_4mods={stats['complete_exams_4mods']}, exams_with_any_mask={stats['exams_with_any_mask']}")
         else:
             rows, stats = index_ct_dataset(ds_path, ds)
-            header = ["Dataset", "Subject", "ExamID", "Splits", "CT", "CTC"]
             print(f"{ds}: subjects={stats['subjects']}, exams={stats['exams']}, CT+CTC pairs={stats['pairs_CT_and_CTC']}")
 
         all_rows.extend(rows)
         per_ds_stats.append((ds, stats))
 
-    # write combined only once
     write_csv(all_rows, header, out_path)
     print(f"[OK] Wrote combined CSV: {out_path} with {len(all_rows)} rows")
 
-    # summary
     print("\n=== SUMMARY ===")
     for ds, stats in per_ds_stats:
         if task == "MR":
@@ -298,15 +345,19 @@ def run(task: str, out_csv):
         else:
             print(f"{ds}: subjects={stats['subjects']}, exams={stats['exams']}, pairs_CT_and_CTC={stats['pairs_CT_and_CTC']}")
 
+# ----------------------------
+# Main
+# ----------------------------
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Index MR or CT datasets into CSVs (one row per subject-exam).")
+    parser = argparse.ArgumentParser(description="Index MR or CT datasets into CSVs (one row per subject-exam) with NIfTI header stats.")
     parser.add_argument("--task", "-t", required=True, choices=["MR", "CT"], help="Choose modality.")
     parser.add_argument("--data_dir", "-d", default=str(DATA_DIR), help="Root data directory (default: /home/yifan/data)")
-    parser.add_argument("--out_csv", "-o", default=None, help="Output CSV path (default: code/data/<TASK>_pair.csv)")
+    parser.add_argument("--out_csv", "-o", default=None, help="Output CSV path (default: files/<TASK>_pair.csv)")
     args = parser.parse_args()
 
     # update DATA_DIR from args
     DATA_DIR = Path(args.data_dir).expanduser().resolve()
+    os.makedirs("./files/", exist_ok=True)
 
-    out_csv = args.out_csv or f"code/data/{args.task}_pair.csv"
+    out_csv = args.out_csv or f"files/{args.task}_pair.csv"
     run(args.task, out_csv=out_csv)
